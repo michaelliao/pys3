@@ -53,14 +53,14 @@ class Client(object):
         self._bucket = bucket
         self._cname = cname
 
-    def _check_obj(self, obj):
-        if not obj:
-            raise StorageError('ObjectName', 'Object cannot be empty.')
-        if isinstance(obj, unicode):
-            obj = obj.encode('utf-8')
-        if obj.startswith('/') or obj.startswith('\\'):
-            raise StorageError('ObjectName', 'Object name cannot start with \"/\" or \"\\\"')
-        return obj
+    def _check_key(self, key):
+        if not key:
+            raise StorageError('Key', 'Key cannot be empty.')
+        if isinstance(key, unicode):
+            key = key.encode('utf-8')
+        if key.startswith('/') or key.startswith('\\'):
+            raise StorageError('Key', 'Key cannot start with \"/\" or \"\\\"')
+        return key
 
     def _check_bucket(self, bucket):
         if bucket:
@@ -115,43 +115,43 @@ class Client(object):
                 break
         return L
 
-    def get_object(self, obj, bucket=None):
+    def get_object(self, key, bucket=None):
         '''
         Get file content.
 
         Args:
-            obj: object name.
+            key: object key.
             bucket: (optional) using default bucket name or override.
         Returns:
             str as file content.
         '''
-        return _api(self._access_key_id, self._access_key_secret, 'GET', self._check_bucket(bucket), self._check_obj(obj))
+        return _api(self._access_key_id, self._access_key_secret, 'GET', self._check_bucket(bucket), self._check_key(key))
 
-    def put_object(self, obj, payload, bucket=None):
+    def put_object(self, key, payload, bucket=None):
         '''
         Upload file.
 
         Args:
-            obj: Object name.
+            key: Object key.
             payload: str or file-like object as file content.
             bucket: (optional) using default bucket name or override.
         Returns:
             the url of uploaded file.
         '''
-        r = _api(self._access_key_id, self._access_key_secret, 'PUT', self._check_bucket(bucket), self._check_obj(obj), payload)
+        r = _api(self._access_key_id, self._access_key_secret, 'PUT', self._check_bucket(bucket), self._check_key(key), payload)
         if self._cname:
             return 'http://%s/%s' % r
         return 'http://%s.s3.amazonaws.com/%s' % r
 
-    def delete_object(self, obj, bucket=None):
+    def delete_object(self, key, bucket=None):
         '''
         Delete file.
 
         Args:
-            obj: object name.
+            key: object key.
             bucket: (optional) using default bucket name or override.
         '''
-        _api(self._access_key_id, self._access_key_secret, 'DELETE', self._check_bucket(bucket), self._check_obj(obj))
+        _api(self._access_key_id, self._access_key_secret, 'DELETE', self._check_bucket(bucket), self._check_key(key))
 
 _TIMEDELTA_ZERO = timedelta(0)
 
@@ -179,7 +179,7 @@ def _guess_content_type(obj):
         return _APPLICATION_OCTET_STREAM
     return mimetypes.types_map.get(obj[n:], _APPLICATION_OCTET_STREAM)
 
-def _signature(access_key_id, access_key_secret, bucket, obj, verb, content_md5, content_type, date, headers=None):
+def _signature(access_key_id, access_key_secret, bucket, key, verb, content_md5, content_type, date, headers=None):
     '''
     Make signature for args.
 
@@ -193,7 +193,7 @@ def _signature(access_key_id, access_key_secret, bucket, obj, verb, content_md5,
     L = [verb, content_md5, content_type, date]
     if headers:
         L.extend(headers)
-    L.append('/%s/%s' % (bucket, obj) if bucket else '/%s' % obj)
+    L.append('/%s/%s' % (bucket, key) if bucket else '/%s' % key)
     str_to_sign = '\n'.join(L)
     h = hmac.new(access_key_secret, str_to_sign, sha)
     return base64.b64encode(h.digest())
@@ -244,13 +244,13 @@ def _httprequest(host, verb, path, payload, headers):
         msg = _mid(xml, '<Message>', '</Message>')[0]
         raise StorageError(code, msg)
 
-def _api(access_key_id, access_key_secret, verb, bucket, obj, payload=None, headers=None):
+def _api(access_key_id, access_key_secret, verb, bucket, key, payload=None, headers=None):
     host = '%s.s3.amazonaws.com' % bucket if bucket else 's3.amazonaws.com'
-    path = '/%s' % obj
+    path = '/%s' % key
     date = _current_datetime()
     content_md5 = ''
-    content_type = '' if verb=='GET' else _guess_content_type(obj)
-    authorization = _signature(access_key_id, access_key_secret, bucket, obj, verb, content_md5, content_type, date)
+    content_type = '' if verb=='GET' else _guess_content_type(key)
+    authorization = _signature(access_key_id, access_key_secret, bucket, key, verb, content_md5, content_type, date)
     if headers is None:
         headers = dict()
     if content_type:
@@ -259,7 +259,7 @@ def _api(access_key_id, access_key_secret, verb, bucket, obj, payload=None, head
     headers['Authorization'] = 'AWS %s:%s' % (access_key_id, authorization)
     r = _httprequest(host, verb, path, payload, headers)
     if verb=='PUT':
-        return (bucket, obj)
+        return (bucket, key)
     return r
 
 if __name__ == '__main__':
